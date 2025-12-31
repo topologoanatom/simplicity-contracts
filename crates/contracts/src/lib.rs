@@ -5,6 +5,8 @@ pub mod error;
 
 pub mod sdk;
 
+pub mod sig_bug;
+
 #[cfg(feature = "array-tr-storage")]
 pub mod array_tr_storage;
 #[cfg(feature = "bytes32-tr-storage")]
