@@ -10,7 +10,7 @@ keywords = ["simplicity", "liquid", "bitcoin", "elements", "contracts"]
 categories = ["cryptography::cryptocurrencies"]
 
 [features]
-default = ["sdk-basic", "options", "dcd", "simple-storage", "bytes32-tr-storage", "array-tr-storage", "swap-with-change", "dbl_sig_bug_repr"]
+default = ["sdk-basic", "options", "dcd", "simple-storage", "bytes32-tr-storage", "array-tr-storage", "swap-with-change"]
 sdk-basic = []
 options = []
 dcd = []
@@ -18,7 +18,6 @@ simple-storage = []
 bytes32-tr-storage = []
 array-tr-storage = []
 swap-with-change = []
-dbl_sig_bug_repr = []
 
 [lints]
 workspace = true
