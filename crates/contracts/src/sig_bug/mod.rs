@@ -353,6 +353,7 @@ mod tests {
             Err(ProgramError::Execution(e)) => {
                 let error_str = format!("{:?}", e);
                 if error_str.contains("ReachedPrunedBranch") {
+                    println!("{}\n", error_str);
                     println!("BUG REPRODUCED: Dual checksig causes ReachedPrunedBranch!");
                 } else {
                     println!("Execution error: {}", error_str);
