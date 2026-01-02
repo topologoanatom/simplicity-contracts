@@ -19,6 +19,8 @@ fn settlement_positive_path(
     assert!(jet::eq_64(current_price, current_price));
     assert!(jet::eq_64(new_price, new_price));
     assert!(jet::eq_32(timestamp, timestamp));
+    assert!(jet::eq_64(amount, amount));
+
 
     checksig_price_attestation(param::ORACLE_PK, timestamp, new_price, oracle_sig);
     checksig_price_attestation(param::USER_PK, timestamp, new_price, secondary_sig);
@@ -50,7 +52,7 @@ fn main() {
             // Expiry: (current_price, user_sig)
             Right(params: (u64, Signature)) => {
                 let (current_price, user_sig): (u64, Signature) = params;
-                // expiry_path(current_price, user_sig)
+                // expiry_path(current_price, usr_sig)
             },
         },
     }

@@ -19,71 +19,50 @@ use simplicityhl::simplicity::jet::elements::ElementsEnv;
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl_core::{ProgramError, run_program};
 
-pub const SIG_VERIFICATION_SOURCE_DISTINCT: &str =
-    include_str!("source_simf/sig_verification_distinct.simf");
-pub const SIG_VERIFICATION_SOURCE_SAME: &str =
-    include_str!("source_simf/sig_verification_same.simf");
+pub const SIG_VERIFICATION_SOURCE: &str = include_str!("source_simf/sig_verification.simf");
+pub const SIG_VERIFICATION_SOURCE_COMMENTED: &str = include_str!("source_simf/sig_verification_commented.simf");
 
 /// Arguments for the sig verification contract
 #[derive(Debug, Clone)]
-pub struct SigVerificationArgumentsDistinct {
+pub struct SigVerificationArguments {
     pub oracle_pk: [u8; 32],
     pub user_pk: [u8; 32],
-}
-#[derive(Debug, Clone)]
-pub struct SigVerificationArgumentsSame {
-    pub oracle_pk: [u8; 32],
-}
-#[derive(Debug, Clone)]
-pub enum SigVerificationArguments {
-    Same(SigVerificationArgumentsSame),
-    Distinct(SigVerificationArgumentsDistinct),
 }
 
 impl SigVerificationArguments {
     pub fn build_arguments(&self) -> Arguments {
-        match self {
-            SigVerificationArguments::Distinct(args) => Arguments::from(HashMap::from([
-                (
-                    WitnessName::from_str_unchecked("ORACLE_PK"),
-                    simplicityhl::Value::u256(U256::from_byte_array(args.oracle_pk)),
-                ),
-                (
-                    WitnessName::from_str_unchecked("USER_PK"),
-                    simplicityhl::Value::u256(U256::from_byte_array(args.user_pk)),
-                ),
-            ])),
-            SigVerificationArguments::Same(args) => Arguments::from(HashMap::from([(
+        Arguments::from(HashMap::from([
+            (
                 WitnessName::from_str_unchecked("ORACLE_PK"),
-                simplicityhl::Value::u256(U256::from_byte_array(args.oracle_pk)),
-            )])),
-        }
+                simplicityhl::Value::u256(U256::from_byte_array(self.oracle_pk)),
+            ),
+            (
+                WitnessName::from_str_unchecked("USER_PK"),
+                simplicityhl::Value::u256(U256::from_byte_array(self.user_pk)),
+            ),
+        ]))
     }
 }
 
 /// Get the template program.
 #[must_use]
-pub fn get_sig_verification_template_program(use_distinct: bool) -> TemplateProgram {
-    if use_distinct {
-        TemplateProgram::new(SIG_VERIFICATION_SOURCE_DISTINCT)
-            .expect("INTERNAL: expected to compile successfully.")
-    } else {
-        TemplateProgram::new(SIG_VERIFICATION_SOURCE_SAME)
-            .expect("INTERNAL: expected to compile successfully.")
+pub fn get_sig_verification_template_program(comment_asserts: bool) -> TemplateProgram {
+    
+    if comment_asserts {
+    TemplateProgram::new(SIG_VERIFICATION_SOURCE_COMMENTED)
+        .expect("INTERNAL: expected to compile successfully.")
+    }
+    else {
+    TemplateProgram::new(SIG_VERIFICATION_SOURCE)
+        .expect("INTERNAL: expected to compile successfully.")
     }
 }
 
 /// Get compiled program.
 #[must_use]
-pub fn get_compiled_sig_verification_program(args: &SigVerificationArguments) -> CompiledProgram {
-    let program;
+pub fn get_compiled_sig_verification_program(args: &SigVerificationArguments, comment_asserts: bool) -> CompiledProgram {
+    let program = get_sig_verification_template_program(comment_asserts);
 
-    match args {
-        SigVerificationArguments::Distinct(_) => {
-            program = get_sig_verification_template_program(true)
-        }
-        SigVerificationArguments::Same(_) => program = get_sig_verification_template_program(false),
-    }
     program.instantiate(args.build_arguments(), true).unwrap()
 }
 
@@ -256,33 +235,20 @@ mod tests {
     }
 
     /// Test settlement_positive_path
-    #[test]
-    fn test_settlement_positive_dual_sig() -> Result<()> {
-
-        // Set to false to reproduce ReachedPrunedBranch
-        const USE_DISTINCT_KEYS: bool = false;
-
+    fn settlement_positive_dual_sig_main(comment_asserts: bool) -> Result<()> {
         let secp = Secp256k1::new();
 
-        let args;
-        
         let oracle_keypair =
             Keypair::from_secret_key(&secp, &secp256k1::SecretKey::from_slice(&[1u8; 32])?);
         let user_keypair =
-            Keypair::from_secret_key(&secp, &secp256k1::SecretKey::from_slice(&[2u8; 32])?);
+            Keypair::from_secret_key(&secp, &secp256k1::SecretKey::from_slice(&[1u8; 32])?);
 
-        if USE_DISTINCT_KEYS {
-            args = SigVerificationArguments::Distinct(SigVerificationArgumentsDistinct {
-                oracle_pk: oracle_keypair.x_only_public_key().0.serialize(),
-                user_pk: user_keypair.x_only_public_key().0.serialize(),
-            })
-        } else {
-            args = SigVerificationArguments::Same(SigVerificationArgumentsSame {
-                oracle_pk: oracle_keypair.x_only_public_key().0.serialize(),
-            })
-        }
+        let args = SigVerificationArguments {
+            oracle_pk: oracle_keypair.x_only_public_key().0.serialize(),
+            user_pk: user_keypair.x_only_public_key().0.serialize(),
+        };
 
-        let program = get_compiled_sig_verification_program(&args);
+        let program = get_compiled_sig_verification_program(&args, comment_asserts);
         let cmr = program.commit().cmr();
 
         // Simple taproot (no TapData for this minimal test)
@@ -327,16 +293,8 @@ mod tests {
         let timestamp = 1735689600u32;
         let amount = 500u64;
 
-        let oracle_sig;
-        let secondary_sig;
-
-        if USE_DISTINCT_KEYS {
-            oracle_sig = sign_price_attestation(&oracle_keypair, timestamp, new_price);
-            secondary_sig = sign_price_attestation(&user_keypair, timestamp, new_price);
-        } else {
-            oracle_sig = sign_price_attestation(&oracle_keypair, timestamp, new_price);
-            secondary_sig = sign_price_attestation(&oracle_keypair, timestamp, new_price);
-        }
+        let oracle_sig = sign_price_attestation(&oracle_keypair, timestamp, new_price);
+        let secondary_sig = sign_price_attestation(&user_keypair, timestamp, new_price);
 
         let branch = SigVerificationBranch::SettlementPositive {
             current_price,
@@ -353,8 +311,7 @@ mod tests {
             Err(ProgramError::Execution(e)) => {
                 let error_str = format!("{:?}", e);
                 if error_str.contains("ReachedPrunedBranch") {
-                    println!("{}\n", error_str);
-                    println!("BUG REPRODUCED: Dual checksig causes ReachedPrunedBranch!");
+                    panic!("BUG REPRODUCED: Dual checksig causes ReachedPrunedBranch!");
                 } else {
                     println!("Execution error: {}", error_str);
                 }
@@ -367,5 +324,15 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_settlement_positive_dual_sig_bug() -> Result<()> {
+        settlement_positive_dual_sig_main(false)
+    }
+
+    #[test]
+    fn test_settlement_positive_dual_sig_pass() -> Result<()> {
+        settlement_positive_dual_sig_main(true)
     }
 }
