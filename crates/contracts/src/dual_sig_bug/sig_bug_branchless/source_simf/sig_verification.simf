@@ -1,0 +1,38 @@
+/// Verify Schnorr signature for dual oracle price attestation
+/// Message format: SHA256(timestamp || price)
+fn checksig_price_attestation(pk: Pubkey, timestamp: u32, price: u64, sig: Signature) {
+    let hasher: Ctx8 = jet::sha_256_ctx_8_init();
+    let hasher: Ctx8 = jet::sha_256_ctx_8_add_4(hasher, timestamp);
+    let hasher: Ctx8 = jet::sha_256_ctx_8_add_8(hasher, price);
+    let msg: u256 = jet::sha_256_ctx_8_finalize(hasher);
+    jet::bip_0340_verify((pk, msg), sig);
+}
+
+fn settlement_positive_path(
+    current_price: u64,
+    new_price: u64,
+    timestamp: u32,
+    amount: u64,
+    oracle_sig: Signature,
+    secondary_sig: Signature
+) {
+    assert!(jet::eq_64(current_price, current_price));
+    assert!(jet::eq_64(new_price, new_price));
+    assert!(jet::eq_32(timestamp, timestamp));
+    assert!(jet::eq_64(amount, amount));
+
+    checksig_price_attestation(param::ORACLE_PK, timestamp, new_price, oracle_sig);
+    checksig_price_attestation(param::USER_PK, timestamp, new_price, secondary_sig);
+}
+
+fn main() {
+    // original match removed
+    let current_price: u64 = witness::CURRENT_PRICE;
+    let new_price: u64 = witness::NEW_PRICE;
+    let timestamp: u32 = witness::TIMESTAMP;
+    let amount: u64 = witness::AMOUNT;
+    let oracle_sig: Signature = witness::ORACLE_SIG;
+    let secondary_sig: Signature = witness::SECONDARY_SIG;
+    
+    settlement_positive_path(current_price, new_price, timestamp, amount, oracle_sig, secondary_sig)
+}

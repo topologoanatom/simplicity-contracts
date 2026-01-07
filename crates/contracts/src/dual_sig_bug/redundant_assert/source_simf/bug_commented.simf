@@ -1,0 +1,11 @@
+
+fn parity_check(x: u64, y: u64) -> bool {
+    assert!(jet::eq_64(x, x));
+    //assert!(jet::eq_64(y, y));
+
+    jet::divides_64(x, 2)
+}
+
+fn main() {
+    assert!(parity_check(witness::X, 5))
+}

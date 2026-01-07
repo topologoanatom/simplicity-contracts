@@ -5,7 +5,7 @@ pub mod error;
 
 pub mod sdk;
 
-pub mod sig_bug;
+pub mod dual_sig_bug;
 
 #[cfg(feature = "array-tr-storage")]
 pub mod array_tr_storage;

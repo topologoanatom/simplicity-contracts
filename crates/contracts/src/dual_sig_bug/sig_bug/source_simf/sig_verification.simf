@@ -21,7 +21,6 @@ fn settlement_positive_path(
     assert!(jet::eq_32(timestamp, timestamp));
     assert!(jet::eq_64(amount, amount));
 
-
     checksig_price_attestation(param::ORACLE_PK, timestamp, new_price, oracle_sig);
     checksig_price_attestation(param::USER_PK, timestamp, new_price, secondary_sig);
 }

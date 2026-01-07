@@ -20,7 +20,8 @@ use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl_core::{ProgramError, run_program};
 
 pub const SIG_VERIFICATION_SOURCE: &str = include_str!("source_simf/sig_verification.simf");
-pub const SIG_VERIFICATION_SOURCE_COMMENTED: &str = include_str!("source_simf/sig_verification_commented.simf");
+pub const SIG_VERIFICATION_SOURCE_COMMENTED: &str =
+    include_str!("source_simf/sig_verification_commented.simf");
 
 /// Arguments for the sig verification contract
 #[derive(Debug, Clone)]
@@ -47,20 +48,21 @@ impl SigVerificationArguments {
 /// Get the template program.
 #[must_use]
 pub fn get_sig_verification_template_program(comment_asserts: bool) -> TemplateProgram {
-    
     if comment_asserts {
-    TemplateProgram::new(SIG_VERIFICATION_SOURCE_COMMENTED)
-        .expect("INTERNAL: expected to compile successfully.")
-    }
-    else {
-    TemplateProgram::new(SIG_VERIFICATION_SOURCE)
-        .expect("INTERNAL: expected to compile successfully.")
+        TemplateProgram::new(SIG_VERIFICATION_SOURCE_COMMENTED)
+            .expect("INTERNAL: expected to compile successfully.")
+    } else {
+        TemplateProgram::new(SIG_VERIFICATION_SOURCE)
+            .expect("INTERNAL: expected to compile successfully.")
     }
 }
 
 /// Get compiled program.
 #[must_use]
-pub fn get_compiled_sig_verification_program(args: &SigVerificationArguments, comment_asserts: bool) -> CompiledProgram {
+pub fn get_compiled_sig_verification_program(
+    args: &SigVerificationArguments,
+    comment_asserts: bool,
+) -> CompiledProgram {
     let program = get_sig_verification_template_program(comment_asserts);
 
     program.instantiate(args.build_arguments(), true).unwrap()
@@ -196,8 +198,11 @@ pub fn execute_sig_verification(
 
 #[cfg(test)]
 mod tests {
+    use crate::dual_sig_bug::comp_dot::convert_to_dot;
+
     use super::*;
-    use anyhow::Result;
+    use anyhow::{Error, Result};
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     use simplicityhl::elements::confidential::{Asset, Value};
@@ -235,7 +240,7 @@ mod tests {
     }
 
     /// Test settlement_positive_path
-    fn settlement_positive_dual_sig_main(comment_asserts: bool) -> Result<()> {
+    fn settlement_positive_dual_sig_main(comment_asserts: bool, graph_str: &mut String) -> Result<()> {
         let secp = Secp256k1::new();
 
         let oracle_keypair =
@@ -249,6 +254,19 @@ mod tests {
         };
 
         let program = get_compiled_sig_verification_program(&args, comment_asserts);
+
+        let comp_str = format!("{:#?}", program);
+        let opening_str = "CompiledProgram {
+    simplicity:";
+        let closing_str = "witness_types: WitnessTypes(";
+
+        *graph_str = convert_to_dot({
+            let start = comp_str.rfind(opening_str).unwrap() + opening_str.len();
+            let end = comp_str.rfind(closing_str).unwrap();
+
+            &comp_str[start..end]
+        });       
+
         let cmr = program.commit().cmr();
 
         // Simple taproot (no TapData for this minimal test)
@@ -305,34 +323,56 @@ mod tests {
             secondary_sig,
         };
 
-        let result = execute_sig_verification(&program, &env, branch, TrackerLogLevel::Trace);
+        let program_exec = execute_sig_verification(&program, &env, branch, TrackerLogLevel::Trace);
 
-        match result {
+        match program_exec {
             Err(ProgramError::Execution(e)) => {
                 let error_str = format!("{:?}", e);
                 if error_str.contains("ReachedPrunedBranch") {
-                    panic!("BUG REPRODUCED: Dual checksig causes ReachedPrunedBranch!");
+                    return Err(Error::msg("BUG REPRODUCED: Dual checksig causes ReachedPrunedBranch!"));
                 } else {
-                    println!("Execution error: {}", error_str);
+                    return Err(Error::msg(error_str));
                 }
             }
             Ok(_) => {
-                println!("Test passed - no bug with this structure");
             }
             Err(e) => {
-                println!("Other error: {:?}", e);
+                    return Err(Error::msg(format!("Other error: {:?}", e)));
             }
         }
+
+        Ok(())
+    }
+
+    const GRAPH_PATH: &str = "src/dual_sig_bug/assets";
+
+    #[test]
+    fn test_settlement_positive_dual_sig_bug() -> Result<()> {
+        let mut graph_str = String::new();
+        let res = settlement_positive_dual_sig_main(false, &mut graph_str);
+
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(GRAPH_PATH);
+        std::fs::write(&format!("{}/graph_bug.dot", GRAPH_PATH), graph_str)
+            .expect("Failed to save file");
+
+        assert!(res.is_ok(), "{}", res.err().unwrap());
+
         Ok(())
     }
 
     #[test]
-    fn test_settlement_positive_dual_sig_bug() -> Result<()> {
-        settlement_positive_dual_sig_main(false)
-    }
-
-    #[test]
     fn test_settlement_positive_dual_sig_pass() -> Result<()> {
-        settlement_positive_dual_sig_main(true)
+        let mut graph_str = String::new();
+        let res = settlement_positive_dual_sig_main(true, &mut graph_str);
+
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(GRAPH_PATH);
+        std::fs::write(&format!("{}/graph_pass.dot", GRAPH_PATH), graph_str)
+            .expect("Failed to save file");
+
+        assert!(res.is_ok());
+
+        Ok(())
     }
 }
